@@ -1,59 +1,135 @@
 import supabase from '../config/supabase.js';
 
-// Obtener todas las confesiones
-export const getAllConfessions = async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('confessions')
-      .select('*, user:user_id(username, avatar_url)')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    res.status(200).json(data);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Crear una nueva confesión
+// Crear confesión
 export const createConfession = async (req, res) => {
   try {
-    const { content, is_anonymous } = req.body;
-    const user_id = is_anonymous ? null : req.user.id;
-    
+    const { id: user_id } = req.user;
+    const { content, is_anonymous, category, community } = req.body;
+
     const { data, error } = await supabase
       .from('confessions')
-      .insert([
-        { content, user_id, is_anonymous }
-      ])
-      .select();
-    
+      .insert([{ user_id, content, is_anonymous, category, community }])
+      .single();
+
     if (error) throw error;
-    
-    res.status(201).json({ 
-      message: 'Confesión creada exitosamente',
-      confession: data[0]
-    });
+    res.status(201).json(data);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Obtener una confesión por ID
-export const getConfessionById = async (req, res) => {
+// Obtener todas las confesiones visibles
+export const getConfessions = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { category, community } = req.query;
     
-    const { data, error } = await supabase
+    let query = supabase
       .from('confessions')
-      .select('*, user:user_id(username, avatar_url)')
-      .eq('id', id)
-      .single();
+      .select('*')
+      .eq('is_hidden', false);
     
+    // Aplicar filtros si están presentes
+    if (category) query = query.eq('category', category);
+    if (community) query = query.eq('community', community);
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
+
     if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Reaccionar a una confesión
+export const reactToConfession = async (req, res) => {
+  try {
+    const { id: user_id } = req.user;
+    const { confession_id, reaction_type } = req.body;
+
+    // Insertar o actualizar reacción
+    const { data, error } = await supabase
+      .from('confession_reactions')
+      .upsert([{ confession_id, user_id, reaction_type }], { onConflict: ['confession_id', 'user_id'] });
+
+    if (error) throw error;
+
+    // Recontar todas las reacciones por tipo
+    const reactionCounts = {};
     
-    res.status(200).json(data);
+    // Obtener todos los tipos de reacciones disponibles
+    const reactionTypes = ['like', 'love', 'haha', 'wow', 'sad', 'angry', 'dislike'];
+    
+    // Contar cada tipo de reacción
+    for (const type of reactionTypes) {
+      const { count } = await supabase
+        .from('confession_reactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('confession_id', confession_id)
+        .eq('reaction_type', type);
+      
+      reactionCounts[type] = count;
+    }
+    
+    // Actualizar los contadores en la confesión
+    await supabase
+      .from('confessions')
+      .update({ 
+        likes_count: reactionCounts.like || 0,
+        dislikes_count: reactionCounts.dislike || 0,
+        reaction_data: reactionCounts  // Guardar todos los contadores en un campo JSON
+      })
+      .eq('id', confession_id);
+
+    res.json({ success: true, reactionCounts });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Comentar confesión
+export const commentOnConfession = async (req, res) => {
+  try {
+    const { id: user_id } = req.user;
+    const { confession_id, content, is_anonymous } = req.body;
+
+    const { data, error } = await supabase
+      .from('confession_comments')
+      .insert([{ confession_id, user_id, content, is_anonymous }])
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Reportar confesión
+export const reportConfession = async (req, res) => {
+  try {
+    const { id: user_id } = req.user;
+    const { confession_id, reason } = req.body;
+
+    const { data, error } = await supabase
+      .from('confession_reports')
+      .insert([{ confession_id, user_id, reason }])
+      .single();
+
+    if (error) throw error;
+
+    // Incrementar contador de reportes
+    const { count } = await supabase
+      .from('confession_reports')
+      .select('*', { count: 'exact', head: true })
+      .eq('confession_id', confession_id);
+
+    await supabase
+      .from('confessions')
+      .update({ reports_count: count })
+      .eq('id', confession_id);
+
+    res.status(201).json({ reported: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

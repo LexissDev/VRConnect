@@ -1,6 +1,6 @@
 // src/routes/vrchatRoutes.js
 import express from 'express';
-import { loginVRChat, verifyEmailOtp, getWorlds, getFriends } from '../services/vrchatService.js';
+import { loginVRChat, verifyEmailOtp, getWorlds, getWorldById, getAllFriends, getRecentWorlds, getCurrentUser } from '../services/vrchatService.js';
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ router.post('/login', async (req, res) => {
 
   res.json(result);
   
-  //res.json(result.data);
+ 
   
 });
 
@@ -47,7 +47,7 @@ router.get('/worlds', async (req, res) => {
     
     
     const worlds = await getWorlds(params);
-    console.log('worlds :', worlds);
+    
     res.json(worlds);
     
   } catch (error) {
@@ -71,8 +71,18 @@ router.get('/worlds/:worldId', async (req, res) => {
   }
 });
 
+router.get('/worlds/recent', async (req, res) => {
+  const result = await getRecentWorlds();
+  res.json(result);
+});
+
+router.get('/user/current', async (req, res) => {
+  const result = await getCurrentUser();
+  res.json(result);
+});
+
 router.get('/friends', async (req, res) => {
-  const result = await getFriends();
+  const result = await getAllFriends();
   res.json(result);
 });
 

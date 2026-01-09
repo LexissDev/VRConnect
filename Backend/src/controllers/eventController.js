@@ -19,13 +19,42 @@ export const getAllEvents = async (req, res) => {
 // Crear un nuevo evento
 export const createEvent = async (req, res) => {
   try {
-    const { title, description, world_id, start_time, end_time } = req.body;
+    const { title, description, world_id, start_time, end_time, image_url, world_data } = req.body;
     const creator_id = req.user.id;
     
+    // Si se proporciona información del mundo, asegúrate de que exista en la tabla local de 'worlds'
+    if (world_data && world_id) {
+      const { error: worldError } = await supabase
+        .from('worlds')
+        .upsert({
+          id: world_id,
+          name: world_data.name,
+          description: world_data.description || '',
+          image_url: world_data.image_url || '',
+          updated_at: new Date().toISOString()
+        })
+        .select();
+
+      if (worldError) {
+        console.error('Error upserting world:', worldError);
+        // No bloqueamos la creación del evento si falla el upsert del mundo, 
+        // pero podría fallar la FK del evento si el mundo no existe.
+      }
+    }
+
     const { data, error } = await supabase
       .from('events')
       .insert([
-        { title, description, world_id, creator_id, start_time, end_time }
+        { 
+          title, 
+          description, 
+          world_id, 
+          creator_id, 
+          start_time, 
+          end_time,
+          image_url, 
+          is_custom_image: !!image_url 
+        }
       ])
       .select();
     

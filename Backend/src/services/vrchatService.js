@@ -20,6 +20,7 @@ let configuration = new vrchat.Configuration({
 let authApi = new vrchat.AuthenticationApi(configuration);
 let usersApi = new vrchat.UsersApi(configuration);
 let worldsApi = new vrchat.WorldsApi(configuration);
+let friendsApi = new vrchat.FriendsApi(configuration);
 
 export const loginVRChat = async (username, password, otp = null) => {
   // Actualizar la configuración con las credenciales del usuario
@@ -39,6 +40,7 @@ export const loginVRChat = async (username, password, otp = null) => {
   authApi = new vrchat.AuthenticationApi(configuration);
   usersApi = new vrchat.UsersApi(configuration);
   worldsApi = new vrchat.WorldsApi(configuration);
+  friendsApi = new vrchat.FriendsApi(configuration);
 
   try {
     // Si se proporciona un código OTP, verificarlo primero
@@ -51,7 +53,7 @@ export const loginVRChat = async (username, password, otp = null) => {
 
     const response = await authApi.getCurrentUser();
 
-    console.log("response en vrchatService:", response.data);
+   
     if (response.data.requiresTwoFactorAuth) {
       return {
         requires2FA: true,
@@ -71,7 +73,7 @@ export const loginVRChat = async (username, password, otp = null) => {
 export const verifyEmailOtp = async (code) => {
   try {
     const result = await authApi.verify2FAEmailCode({ code });
-    console.log("result", result);
+    
     return { success: true, result };
   } catch (error) {
     return { error: true, message: error.response?.data || error.message };
@@ -88,7 +90,7 @@ export const getWorlds = async (params = {}) => {
       throw new Error("No authenticated session.");
     }
 
-    console.log("currentUser:", currentUser);
+    
 
     const response = await worldsApi.searchWorlds(
         params.featured,    // featured
@@ -128,11 +130,54 @@ export const getWorldById = async (worldId) => {
   }
 };
 
-export const getFriends = async () => {
-  try {
-    const res = await usersApi.getFriends();
-    return res;
-  } catch (error) {
-    return { error: true, message: error.response?.data || error.message };
+export const getAllFriends = async (includeOffline = true) => {
+    try {
+      let allFriends = [];
+      let offset = 0;
+      const limit = 100; // Número máximo de amigos por solicitud
+      let hasMoreFriends = true;
+      
+      while (hasMoreFriends) {
+        const response = await friendsApi.getFriends(offset, limit, includeOffline);
+        
+        if (!response.data || response.data.length === 0) {
+          hasMoreFriends = false;
+        } else {
+          allFriends = [...allFriends, ...response.data];
+          offset += response.data.length;
+          
+          // Si recibimos menos amigos que el límite, significa que no hay más
+          if (response.data.length < limit) {
+            hasMoreFriends = false;
+          }
+        }
+      }
+      
+      return { success: true, data: allFriends };
+    } catch (error) {
+      console.error("Error al obtener la lista completa de amigos:", error);
+      return { error: true, message: error.response?.data || error.message };
+    }
+  };
+
+  export const getCurrentUser = async () => {
+    try {
+      const currentUser = await authApi.getCurrentUser();
+      console.log("Usuario actual:", currentUser.data); // Agrega este console.log para verificar los detalles del usuario actua
+      return { success: true, data: currentUser.data };
+    } catch (error) {
+      console.error("Error al obtener el usuario actual:", error);
+      return { error: true, message: error.response?.data || error.message };
+    }
   }
-};
+
+
+  export const getRecentWorlds = async (limit = 10) => {
+    try {
+      const response = await worldsApi.getRecentWorlds();
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Error al obtener los mundos recientes:", error);
+      return { error: true, message: error.response?.data || error.message };
+    }
+  }
