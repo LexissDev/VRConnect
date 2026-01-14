@@ -15,6 +15,7 @@ import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import useAuthStore from '../../stores/authStore';
+import useProfileStore from '../../stores/profileStore';
 import Button from '../../components/ui/Button';
 import cloudinary from 'services/cloudinary';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -77,7 +78,7 @@ const ProfileSetupScreen = ({ navigation, route }) => {
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], // Corregido: MediaType en lugar de MediaTypeOptions
+      mediaTypes: ['images'], 
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -124,28 +125,37 @@ const ProfileSetupScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleContinue = async () => {
-    if (!avatar) {
-      Alert.alert('Imagen requerida', 'Por favor selecciona una imagen de perfil');
-      return;
+    const handleContinue = async () => {
+    // Si no hay avatar, usar uno por defecto o forzar (decisión de diseño, aquí forzamos o ponemos warning)
+    let finalAvatarUrl = avatar;
+    
+    if (!finalAvatarUrl) {
+       Alert.alert('Imagen requerida', 'Por favor selecciona una imagen de perfil');
+       return;
     }
 
     setLoading(true);
     try {
-      // Subir la imagen a Supabase Storage
-      const avatarUrl = await uploadAvatar(avatar);
+      // Subir imagen a Cloudinary si es local
+      let avatarUrl = finalAvatarUrl;
+      if (!avatarUrl.startsWith('http')) {
+         avatarUrl = await uploadAvatar(finalAvatarUrl);
+      }
 
       // Registrar usuario con todos los datos
-      const result = await register(email, password, username, {
-        avatar_url: avatarUrl,
-        languages: selectedLanguages,
-      });
+      const result = await register(email, password, username);
 
       if (!result.success) {
         throw new Error(result.error || 'Error al registrar usuario');
       }
+      
+      const { updateProfile } = useProfileStore.getState();
+      await updateProfile({
+        avatar_url: avatarUrl,
+        languages: selectedLanguages
+      });
 
-      // Animación de salida
+      // Animación de salida Y navegación a HOME
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -158,7 +168,7 @@ const ProfileSetupScreen = ({ navigation, route }) => {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        navigation.navigate('VRChatLinkPrompt');
+        // La navegación la maneja el AuthStack al detectar usuario
       });
     } catch (error) {
       Alert.alert('Error', error.message || 'No se pudo completar el registro');
@@ -168,16 +178,16 @@ const ProfileSetupScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView className="flex-1 ">
-      <View className="flex-1 bg-[#121212]">
-        <StatusBar style="light" />
-        <LinearGradient
-          colors={['rgba(98, 0, 238, 0.2)', 'rgba(0, 0, 0, 0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 0.3 }}
-          className="absolute h-full w-full"
-        />
+    <View className="flex-1">
+      <StatusBar style="dark" />
+      <LinearGradient
+        colors={['#E0E7FF', '#F3E8FF', '#E0F2FE']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+      />
 
+      <SafeAreaView className="flex-1">
         <ScrollView contentContainerClassName="flex-grow px-6 py-5">
           <Animated.View
             style={{
@@ -185,9 +195,9 @@ const ProfileSetupScreen = ({ navigation, route }) => {
               transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
             }}
             className="mb-8 items-center">
-            <Text className="text-3xl font-bold text-white">Personaliza tu perfil</Text>
-            <Text className="mt-2 text-center text-lg text-gray-400">
-              Hola {username}! Vamos a personalizar tu experiencia en VRConnect
+            <Text className="text-3xl font-bold text-gray-900">Personaliza tu perfil</Text>
+            <Text className="mt-2 text-center text-lg text-gray-500">
+              Hola {username}! Vamos a personalizar tu experiencia
             </Text>
           </Animated.View>
 
@@ -199,7 +209,7 @@ const ProfileSetupScreen = ({ navigation, route }) => {
             className="mb-8 items-center">
             <TouchableOpacity
               onPress={pickImage}
-              className="mb-4 overflow-hidden rounded-full border-4 border-purple-500">
+              className="mb-4 overflow-hidden rounded-full border-4 border-white shadow-lg shadow-purple-200">
               {avatar ? (
                 <Animated.Image
                   source={{ uri: avatar }}
@@ -207,13 +217,13 @@ const ProfileSetupScreen = ({ navigation, route }) => {
                   style={{ transform: [{ scale: scaleAnim }] }}
                 />
               ) : (
-                <View className="h-32 w-32 items-center justify-center bg-[#2A2A2A]">
-                  <Feather name="camera" size={40} color="#6200ee" />
-                  <Text className="mt-2 text-sm text-gray-300">Añadir foto</Text>
+                <View className="h-32 w-32 items-center justify-center bg-white">
+                  <Feather name="camera" size={40} color="#A855F7" />
+                  <Text className="mt-2 text-sm text-gray-400">Añadir foto</Text>
                 </View>
               )}
             </TouchableOpacity>
-            <Text className="text-base text-gray-300">Selecciona una imagen de perfil</Text>
+            <Text className="text-base text-gray-600">Selecciona una imagen de perfil</Text>
           </Animated.View>
 
           <Animated.View
@@ -222,18 +232,20 @@ const ProfileSetupScreen = ({ navigation, route }) => {
               transform: [{ translateY: slideAnim }],
             }}
             className="mb-8">
-            <Text className="mb-4 text-xl font-bold text-white">¿Qué idiomas hablas?</Text>
+            <Text className="mb-4 text-xl font-bold text-gray-800">¿Qué idiomas hablas?</Text>
             <View className="flex-row flex-wrap">
               {languages.map((lang) => (
                 <TouchableOpacity
                   key={lang.id}
                   onPress={() => toggleLanguage(lang.id)}
-                  className={`m-1 rounded-full px-4 py-2 ${
-                    selectedLanguages.includes(lang.id) ? 'bg-purple-600' : 'bg-[#2A2A2A]'
+                  className={`m-1 rounded-full px-4 py-2 border ${
+                    selectedLanguages.includes(lang.id) 
+                      ? 'bg-purple-600 border-purple-600' 
+                      : 'bg-white border-white shadow-sm'
                   }`}>
                   <Text
-                    className={`text-sm ${
-                      selectedLanguages.includes(lang.id) ? 'font-bold text-white' : 'text-gray-300'
+                    className={`text-sm font-medium ${
+                      selectedLanguages.includes(lang.id) ? 'text-white' : 'text-gray-600'
                     }`}>
                     {lang.name}
                   </Text>
@@ -248,16 +260,28 @@ const ProfileSetupScreen = ({ navigation, route }) => {
               transform: [{ translateY: slideAnim }],
             }}
             className="mt-auto">
-            <Button
-              title="Completar Registro"
+             <TouchableOpacity
               onPress={handleContinue}
-              loading={loading}
-              className="mb-4"
-            />
+              disabled={loading}
+              className="mt-2"
+            >
+              <LinearGradient
+                colors={['#8B5CF6', '#3B82F6']} 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingVertical: 16, shadowColor: '#A855F7', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 }}
+              >
+                {loading ? (
+                   <Text className="font-bold text-white">Registrando...</Text>
+                ) : (
+                   <Text className="text-lg font-bold text-white">Completar Registro</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </Animated.View>
         </ScrollView>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 

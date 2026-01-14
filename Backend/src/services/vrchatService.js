@@ -52,7 +52,7 @@ export const loginVRChat = async (username, password, otp = null) => {
     }
 
     const response = await authApi.getCurrentUser();
-
+    console.log("Response GetCurrentUser:", response); // Agrega este console.log para verificar los detalles del usuario actua
    
     if (response.data.requiresTwoFactorAuth) {
       return {
@@ -103,13 +103,20 @@ export const getWorlds = async (params = {}) => {
         params.search,      // search
         params.tag,         // tag
         params.notag,       // notag
-        params.releaseStatus// releaseStatus
-        // resto lo dejas undefined
+        params.releaseStatus,// releaseStatus
+        undefined,          // maxUnityVersion
+        undefined,          // minUnityVersion
+        params.platform     // platform
       );
    
     return response.data;
   } catch (error) {
-    console.error("Error al obtener mundos:", error);
+    console.error("Error al obtener mundos (Service):");
+    if (error.response) {
+        console.error("VRChat API Error:", error.response.status, error.response.data);
+    } else {
+        console.error("Error:", error.message);
+    }
     throw error;
   }
 };

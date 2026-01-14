@@ -8,14 +8,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
-  Modal,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { getWorlds } from '../../services/vrchat';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import useAuthStore from 'stores/authStore';
+
+const { width } = Dimensions.get('window');
+const COLUMN_WIDTH = (width - 48) / 2; // 2 columns with padding
 
 const WorldsScreen = ({ navigation }) => {
+  const { user } = useAuthStore();
   const [worlds, setWorlds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,16 +29,16 @@ const WorldsScreen = ({ navigation }) => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // Nuevos estados para búsqueda y filtros
+  // Modern Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [isFilterModalVisible, setFilterModalVisible] = useState(false);
-  const [filters, setFilters] = useState({
-    sort: 'popularity',
-    releaseStatus: 'public',
-    featured: '',
-    tag: '',
-  });
-  const [isSearching, setIsSearching] = useState(false);
+  const [activePlatform, setActivePlatform] = useState('All'); // 'All', 'Quest', 'PC'
+  
+  // Platform options
+  const platforms = [
+    { id: 'All', icon: 'grid', label: 'All' },
+    { id: 'Quest', icon: 'smartphone', label: 'Quest' },
+    { id: 'PC', icon: 'monitor', label: 'PC' },
+  ];
 
   const fetchWorlds = async (refresh = false) => {
     try {
@@ -47,25 +53,35 @@ const WorldsScreen = ({ navigation }) => {
       setError(null);
 
       const offset = refresh ? 0 : page * 20;
+      console.log(`Cargando mundos... Page: ${page}, Offset: ${offset}, Refresh: ${refresh}`);
 
-      // Incluir parámetros de búsqueda y filtros
+      // In VRChat API:
+      // - platform='android' -> Quest compatible
+      // - platform='standalonewindows' -> PC compatible
+      // - undefined -> All
+      
+      let platformParam = undefined;
+      if (activePlatform === 'Quest') platformParam = 'android';
+      if (activePlatform === 'PC') platformParam = 'standalonewindows';
+      
       const params = {
         n: 20,
         offset,
-        sort: filters.sort,
-        releaseStatus: filters.releaseStatus,
+        sort: 'heat', // Trending
+        releaseStatus: 'public',
         search: searchQuery.trim() || undefined,
-        tag: filters.tag || undefined,
-        featured: filters.featured || undefined,
+        platform: platformParam,
       };
 
-      console.log('Fetching with params:', params);
+      // console.log('Fetching with params:', params);
       const response = await getWorlds(params);
 
-      console.log('response: ', response);
+      // console.log('Respuesta getWorlds: ', response);     
 
       if (response && Array.isArray(response)) {
+        console.log(`Recibidos ${response.length} mundos.`);
         if (response.length < 20) {
+          console.log('No hay más mundos (response < 20)');
           setHasMore(false);
         }
 
@@ -75,460 +91,211 @@ const WorldsScreen = ({ navigation }) => {
           setWorlds((prevWorlds) => [...prevWorlds, ...response]);
         }
       } else {
-        setError('Formato de respuesta inesperado');
+        // setError('Formato de respuesta inesperado'); // Fail silently or show empty
       }
     } catch (error) {
-      setError(`Error al cargar mundos: ${error.message}`);
+      console.error('Error fetching worlds:', error);
+      // Stop pagination on error to prevent infinite loop
+      if (!refresh) {
+          setHasMore(false);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
-      setIsSearching(false);
     }
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchWorlds(true);
-  };
-
-  const handleLoadMore = () => {
-    if (!loading && hasMore) {
-      setPage((prevPage) => prevPage + 1);
-    }
-  };
-
-  // Función para manejar la búsqueda
-  const handleSearch = () => {
-    setIsSearching(true);
-    setPage(0);
-    fetchWorlds(true);
-  };
-
-  // Función para aplicar filtros
-  const applyFilters = (newFilters) => {
-    setFilters(newFilters);
-    setFilterModalVisible(false);
-    setPage(0);
-    fetchWorlds(true);
-  };
-
-  // Función para limpiar filtros
-  const clearFilters = () => {
-    setFilters({
-      sort: 'popularity',
-      releaseStatus: 'public',
-      featured: '',
-      tag: '',
-    });
-    setSearchQuery('');
-    setPage(0);
-    fetchWorlds(true);
   };
 
   useEffect(() => {
-    fetchWorlds();
+    fetchWorlds(true);
+  }, [activePlatform]); // Refetch when platform changes
+
+  // Listener para paginación
+  useEffect(() => {
+      if (page > 0) {
+          console.log(`Efecto de página disparado: ${page}`);
+          fetchWorlds(false);
+      }
   }, [page]);
 
-  const renderWorldItem = ({ item }) => (
-    <TouchableOpacity
-      className="mb-2.5 flex-row overflow-hidden rounded-lg bg-[#2A2A2A] shadow"
-      onPress={() => navigation.navigate('WorldDetail', { worldId: item.id })}>
-      <Image
-        source={{ uri: item.thumbnailImageUrl || 'https://via.placeholder.com/150' }}
-        className="h-[120px] w-[120px]"
-        resizeMode="cover"
-      />
-      <View className="flex-1 justify-between p-2.5">
-        <Text className="mb-1 text-base font-bold text-white">{item.name}</Text>
-        <Text className="mb-2 text-sm text-[#ccc]">Por: {item.authorName}</Text>
-        <View className="flex-row justify-between">
-          <View className="flex-row items-center">
-            <Ionicons name="people" size={16} color="#666" />
-            <Text className="ml-1 text-xs text-[#ccc]">{item.occupants || 0}</Text>
-          </View>
-          <View className="flex-row items-center">
-            <Ionicons name="heart" size={16} color="#666" />
-            <Text className="ml-1 text-xs text-[#ccc]">{item.favorites || 0}</Text>
-          </View>
-          <View className="flex-row items-center">
-            <Ionicons name="time" size={16} color="#666" />
-            <Text className="ml-1 text-xs text-[#ccc]">{formatDate(item.updated_at)}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Desconocido';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES');
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchWorlds(true); // reset page to 0 inside
   };
 
-  // Componente para el modal de filtros
-  const FilterModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isFilterModalVisible}
-      onRequestClose={() => setFilterModalVisible(false)}>
-      <View className="flex-1 justify-end bg-black/50">
-        <View className="max-h-[80%] rounded-t-[20px] bg-[#1E1E1E]">
-          <View className="flex-row items-center justify-between border-b border-[#333] p-4">
-            <Text className="text-lg font-bold text-white">Filtros</Text>
-            <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView className="p-4">
-            {/* Ordenar por */}
-            <Text className="mb-2 mt-4 text-base font-bold text-white">Ordenar por</Text>
-            <View className="flex-row flex-wrap">
-              {[
-                { value: 'popularity', label: 'Popularidad' },
-                { value: 'created', label: 'Fecha de creación' },
-                { value: 'updated', label: 'Última actualización' },
-                { value: '_created_at', label: 'Más recientes' },
-                { value: 'heat', label: 'Tendencia' },
-                { value: 'name', label: 'Nombre' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  className={`mb-2 mr-2 rounded-full bg-[#2A2A2A] px-3 py-2 ${
-                    filters.sort === option.value ? 'bg-[#6200ee]' : ''
-                  }`}
-                  onPress={() => setFilters({ ...filters, sort: option.value })}>
-                  <Text
-                    className={`text-sm ${
-                      filters.sort === option.value ? 'font-bold text-white' : 'text-[#ccc]'
-                    }`}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Estado de publicación */}
-            <Text className="mb-2 mt-4 text-base font-bold text-white">Estado</Text>
-            <View className="flex-row flex-wrap">
-              {[
-                { value: 'public', label: 'Público' },
-                { value: 'private', label: 'Privado' },
-                { value: 'all', label: 'Todos' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  className={`mb-2 mr-2 rounded-full bg-[#2A2A2A] px-3 py-2 ${
-                    filters.releaseStatus === option.value ? 'bg-[#6200ee]' : ''
-                  }`}
-                  onPress={() => setFilters({ ...filters, releaseStatus: option.value })}>
-                  <Text
-                    className={`text-sm ${
-                      filters.releaseStatus === option.value
-                        ? 'font-bold text-white'
-                        : 'text-[#ccc]'
-                    }`}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Destacados */}
-            <Text className="mb-2 mt-4 text-base font-bold text-white">Destacados</Text>
-            <View className="flex-row flex-wrap">
-              {[
-                { value: '', label: 'Todos' },
-                { value: 'true', label: 'Destacados' },
-                { value: 'false', label: 'No destacados' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  className={`mb-2 mr-2 rounded-full bg-[#2A2A2A] px-3 py-2 ${
-                    filters.featured === option.value ? 'bg-[#6200ee]' : ''
-                  }`}
-                  onPress={() => setFilters({ ...filters, featured: option.value })}>
-                  <Text
-                    className={`text-sm ${
-                      filters.featured === option.value ? 'font-bold text-white' : 'text-[#ccc]'
-                    }`}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Etiquetas populares */}
-            <Text className="mb-2 mt-4 text-base font-bold text-white">Etiquetas populares</Text>
-            <View className="flex-row flex-wrap">
-              {[
-                { value: '', label: 'Todas' },
-                { value: 'game', label: 'Juego' },
-                { value: 'social', label: 'Social' },
-                { value: 'avatar', label: 'Avatar' },
-                { value: 'quest', label: 'Quest' },
-                { value: 'horror', label: 'Terror' },
-                { value: 'music', label: 'Música' },
-                { value: 'dance', label: 'Baile' },
-                { value: 'adventure', label: 'Aventura' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  className={`mb-2 mr-2 rounded-full bg-[#2A2A2A] px-3 py-2 ${
-                    filters.tag === option.value ? 'bg-[#6200ee]' : ''
-                  }`}
-                  onPress={() => setFilters({ ...filters, tag: option.value })}>
-                  <Text
-                    className={`text-sm ${
-                      filters.tag === option.value ? 'font-bold text-white' : 'text-[#ccc]'
-                    }`}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-
-          <View className="flex-row justify-between border-t border-[#333] p-4">
-            <TouchableOpacity
-              className="rounded-lg border border-[#6200ee] px-4 py-2.5"
-              onPress={clearFilters}>
-              <Text className="font-bold text-[#6200ee]">Limpiar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="rounded-lg bg-[#6200ee] px-4 py-2.5"
-              onPress={() => applyFilters(filters)}>
-              <Text className="font-bold text-white">Aplicar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  if (error && worlds.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center bg-[#121212] p-5">
-        <Text className="mb-5 text-center text-base text-[#ff6b6b]">{error}</Text>
-        <TouchableOpacity
-          className="rounded bg-[#6200ee] px-5 py-2.5"
-          onPress={() => fetchWorlds(true)}>
-          <Text className="font-bold text-white">Reintentar</Text>
-        </TouchableOpacity>
-      </View>
-    );
+  const handleLoadMore = () => {
+    console.log(`Intentando cargar más... Loading: ${loading}, HasMore: ${hasMore}`);
+    if (!loading && hasMore) {
+      console.log('Aumentando página...');
+      setPage((prevPage) => prevPage + 1);
+    }
+  };
+  
+  // Trigger search on submit
+  const handleSearch = () => {
+      fetchWorlds(true);
   }
 
-  return (
-    <SafeAreaView className="flex-1 bg-[#121212]">
-      <View className="flex-1 bg-[#121212]">
-        {/* Barra de búsqueda */}
-        <View className="flex-row items-center bg-[#1E1E1E] px-2.5 py-2">
-          <View className="h-10 flex-1 flex-row items-center rounded-lg bg-[#2A2A2A] px-2.5">
-            <Ionicons name="search" size={20} color="#999" className="mr-2" />
-            <TextInput
-              className="h-10 flex-1 text-base text-white"
-              placeholder="Buscar mundos..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearch}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  setSearchQuery('');
-                  if (searchQuery) {
-                    setPage(0);
-                    fetchWorlds(true);
-                  }
-                }}
-                className="p-1">
-                <Ionicons name="close-circle" size={20} color="#999" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            className="ml-2.5 h-10 w-10 items-center justify-center rounded-lg bg-[#2A2A2A]"
-            onPress={() => setFilterModalVisible(true)}>
-            <Ionicons
-              name="options"
-              size={22}
-              color="#fff"
-              style={{ transform: [{ rotate: '90deg' }] }}
-            />
-          </TouchableOpacity>
+  // Header Component (Search + Filters + Featured)
+  const ListHeader = () => (
+    <View className="mb-4 px-6 pt-2">
+      {/* Title Header */}
+      <View className="mb-6 flex-row items-center justify-between">
+        <View className="flex-row items-center">
+            <View className="h-10 w-10 items-center justify-center rounded-full bg-purple-100 mr-3">
+                <Feather name="compass" size={24} color="#8B5CF6" />
+            </View>
+            <Text className="text-3xl font-bold text-gray-900">Descubre</Text>
         </View>
-
-        {/* Chips de filtros activos */}
-        {(filters.sort !== 'popularity' ||
-          filters.releaseStatus !== 'public' ||
-          filters.featured !== '' ||
-          filters.tag !== '') && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="bg-[#1E1E1E] px-2.5 py-2">
-            {filters.sort !== 'popularity' && (
-              <View className="mr-2 h-[36px] min-w-[100px] flex-row items-center rounded-full bg-[#6200ee] px-4 py-2">
-                <Text
-                  className="mr-1.5 flex-1 flex-shrink-0 text-xs text-white"
-                  numberOfLines={1}
-                  ellipsizeMode="tail">
-                  Orden: {getSortLabel(filters.sort)}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setFilters({ ...filters, sort: 'popularity' });
-                    setPage(0);
-                    fetchWorlds(true);
-                  }}
-                  className="ml-1">
-                  <Ionicons name="close-circle" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {filters.releaseStatus !== 'public' && (
-              <View className="mr-2 h-[36px] min-w-[100px] flex-row items-center rounded-full bg-[#6200ee] px-4 py-2">
-                <Text
-                  className="mr-1.5 flex-1 flex-shrink-0 text-xs text-white"
-                  numberOfLines={1}
-                  ellipsizeMode="tail">
-                  Estado:{' '}
-                  {filters.releaseStatus === 'all'
-                    ? 'Todos'
-                    : filters.releaseStatus === 'private'
-                      ? 'Privado'
-                      : 'Público'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setFilters({ ...filters, releaseStatus: 'public' });
-                    setPage(0);
-                    fetchWorlds(true);
-                  }}
-                  className="ml-1">
-                  <Ionicons name="close-circle" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {filters.featured !== '' && (
-              <View className="mr-2 h-[36px] min-w-[100px] flex-row items-center rounded-full bg-[#6200ee] px-4 py-2">
-                <Text
-                  className="mr-1.5 flex-1 flex-shrink-0 text-xs text-white"
-                  numberOfLines={1}
-                  ellipsizeMode="tail">
-                  {filters.featured === 'true' ? 'Destacados' : 'No destacados'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setFilters({ ...filters, featured: '' });
-                    setPage(0);
-                    fetchWorlds(true);
-                  }}
-                  className="ml-1">
-                  <Ionicons name="close-circle" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {filters.tag !== '' && (
-              <View className="mr-2 h-[36px] min-w-[100px] flex-row items-center rounded-full bg-[#6200ee] px-4 py-2">
-                <Text
-                  className="mr-1.5 flex-1 flex-shrink-0 text-xs text-white"
-                  numberOfLines={1}
-                  ellipsizeMode="tail">
-                  Tag: {filters.tag}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setFilters({ ...filters, tag: '' });
-                    setPage(0);
-                    fetchWorlds(true);
-                  }}
-                  className="ml-1">
-                  <Ionicons name="close-circle" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Botón para limpiar todos los filtros */}
-            <TouchableOpacity
-              className="h-[36px] min-w-[100px] flex-row items-center justify-center rounded-full bg-[#444] px-4 py-2"
-              onPress={clearFilters}>
-              <Text className="text-xs font-medium text-white">Limpiar todo</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* Indicador de búsqueda */}
-        {isSearching && (
-          <View className="flex-row items-center justify-center bg-[#1E1E1E] p-2">
-            <ActivityIndicator size="small" color="#6200ee" />
-            <Text className="ml-2 text-sm text-white">Buscando...</Text>
-          </View>
-        )}
-
-        <FlatList
-          data={worlds}
-          renderItem={renderWorldItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 10 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={['#6200ee']}
+        
+        <View className="flex-row items-center space-x-3">
+             <TouchableOpacity className="relative">
+                <Feather name="bell" size={24} color="#4B5563" />
+                <View className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
+             </TouchableOpacity>
+             <Image 
+                source={{ uri: user?.profile?.avatar_url || 'https://via.placeholder.com/40' }}
+                className="h-9 w-9 rounded-full border border-gray-200"
             />
-          }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            loading && !refreshing ? (
-              <View className="py-5">
-                <ActivityIndicator size="large" color="#6200ee" />
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            !loading ? (
-              <View className="h-[400px] flex-1 items-center justify-center p-5">
-                <Ionicons name="search-outline" size={60} color="#666" />
-                <Text className="mb-3 mt-4 text-center text-base text-[#ccc]">
-                  No se encontraron mundos con los filtros actuales
-                </Text>
-                <TouchableOpacity
-                  className="mt-2 rounded-full bg-[#6200ee] px-6 py-3"
-                  onPress={clearFilters}>
-                  <Text className="text-sm font-bold text-white">Limpiar filtros</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null
-          }
-        />
-
-        {/* Modal de filtros */}
-        <FilterModal />
+        </View>
       </View>
+
+      {/* Search Bar */}
+      <View className="mb-6 flex-row items-center rounded-2xl bg-white px-4 py-3 shadow-sm border border-gray-100">
+        <Feather name="search" size={20} color="#9CA3AF" />
+        <TextInput
+          className="ml-3 flex-1 text-base text-gray-700"
+          placeholder="Buscar mundos..."
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+        />
+      </View>
+
+      {/* Platform Filters */}
+      <View className="mb-8 flex-row justify-between">
+        {platforms.map((platform) => {
+            const isActive = activePlatform === platform.id;
+            return (
+                <TouchableOpacity
+                    key={platform.id}
+                    onPress={() => setActivePlatform(platform.id)}
+                    className={`flex-1 flex-row items-center justify-center rounded-xl py-3 mx-1 ${isActive ? 'bg-[#8B5CF6]' : 'bg-white border border-gray-100'}`}
+                    style={{ elevation: isActive ? 4 : 1 }}
+                >
+                    <Feather name={platform.icon} size={18} color={isActive ? 'white' : '#6B7280'} />
+                    <Text className={`ml-2 font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>{platform.label}</Text>
+                </TouchableOpacity>
+            )
+        })}
+      </View>
+
+      {/* World of the Day - Featured Hero */}
+      <View className="mb-8">
+        <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-xl font-bold text-gray-900">World of the Day</Text>
+            <View className="bg-purple-100 px-2 py-1 rounded text-purple-700">
+                <Text className="text-xs font-bold text-purple-700 tracking-wider">FEATURED</Text>
+            </View>
+        </View>
+        
+        {worlds.length > 0 && (
+            <TouchableOpacity 
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('WorldDetail', { worldId: worlds[0].id })}
+                className="h-[220px] w-full overflow-hidden rounded-3xl bg-gray-200 shadow-lg shadow-purple-200"
+            >
+                <Image 
+                    source={{ uri: worlds[0].thumbnailImageUrl }}
+                    className="h-full w-full"
+                    resizeMode="cover"
+                />
+                <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.8)']}
+                    className="absolute bottom-0 left-0 right-0 h-32 justify-end p-5"
+                >
+                    <View className="mb-1 flex-row items-center">
+                        <View className="h-2 w-2 rounded-full bg-green-400 mr-2" />
+                        <Text className="text-xs font-bold text-gray-300 uppercase tracking-widest">{worlds[0].occupants} ONLINE</Text>
+                    </View>
+                    <Text className="text-2xl font-bold text-white leading-tight">{worlds[0].name}</Text>
+                    <Text className="text-sm font-medium text-gray-300 mt-1">by {worlds[0].authorName}</Text>
+                </LinearGradient>
+            </TouchableOpacity>
+        )}
+      </View>
+
+      <View className="mb-4 flex-row items-center justify-between">
+         <Text className="text-xl font-bold text-gray-900">Trending Now</Text>
+         <TouchableOpacity onPress={handleSearch}>
+             <Text className="text-sm font-bold text-purple-600 flex-row items-center">
+                 VIEW ALL <Feather name="arrow-right" size={14} />
+             </Text>
+         </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Grid Item Renderer
+  const renderItem = ({ item, index }) => {
+      // Skip the first item as it is featured
+      if (index === 0 && !searchQuery) return null;
+
+      return (
+        <TouchableOpacity
+            className="mb-5 rounded-2xl bg-white shadow-sm shadow-gray-200"
+            style={{ 
+                width: COLUMN_WIDTH, 
+                marginLeft: index % 2 === 1 ? 16 : 0, // Gutter
+                elevation: 2 
+            }}
+            onPress={() => navigation.navigate('WorldDetail', { worldId: item.id })}
+        >
+            <View className="h-[140px] w-full overflow-hidden rounded-t-2xl bg-gray-100 relative">
+                <Image 
+                    source={{ uri: item.thumbnailImageUrl }}
+                    className="h-full w-full"
+                    resizeMode="cover"
+                />
+                 <View className="absolute top-2 right-2 h-8 w-8 items-center justify-center rounded-full bg-white/90">
+                    <Feather name="monitor" size={14} color="#8B5CF6" /> 
+                </View>
+            </View>
+            
+            <View className="p-3">
+                <Text className="mb-1 text-base font-bold text-gray-900 leading-5" numberOfLines={1}>{item.name}</Text>
+                <Text className="text-xs text-gray-500 uppercase font-bold tracking-wide" numberOfLines={1}>{item.authorName}</Text>
+            </View>
+        </TouchableOpacity>
+      );
+  };
+
+
+  return (
+    <SafeAreaView className="flex-1 bg-[#F9FAFB]">
+        {loading && !refreshing && worlds.length === 0 ? (
+            <View className="flex-1 items-center justify-center">
+                 <ActivityIndicator size="large" color="#8B5CF6" />
+            </View>
+        ) : (
+            <FlatList
+                data={worlds}
+                keyExtractor={(item) => item.id}
+                renderItem={renderItem}
+                numColumns={2}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                columnWrapperStyle={{ paddingHorizontal: 24 }} // Padding for grid
+                ListHeaderComponent={ListHeader}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#8B5CF6" />
+                }
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+            />
+        )}
     </SafeAreaView>
   );
-};
-
-// Función auxiliar para obtener la etiqueta de ordenación
-const getSortLabel = (sortValue) => {
-  const sortOptions = {
-    popularity: 'Popularidad',
-    created: 'Fecha de creación',
-    updated: 'Última actualización',
-    _created_at: 'Más recientes',
-    heat: 'Tendencia',
-    name: 'Nombre',
-  };
-  return sortOptions[sortValue] || sortValue;
 };
 
 export default WorldsScreen;

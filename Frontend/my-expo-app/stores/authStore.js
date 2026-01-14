@@ -1,131 +1,83 @@
 import { create } from 'zustand';
-import supabase from 'services/supabase';
+import supabase from '../services/supabase';
 
-const useAuthStore = create((set) => ({
+const useAuthStore = create((set, get) => ({
   user: null,
-  session: null,
   profile: null,
   loading: false,
   error: null,
-  isVrchatUser: false,
 
-  setIsVrchatUser: (isVrchatUser) => set({ isVrchatUser }),
-
-  // Iniciar sesión
+  // Login
   login: async (email, password) => {
     set({ loading: true, error: null });
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-
-      // Obtener perfil desde 'profiles'
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      set({
-        user: data.user,
-        session: data.session,
-        profile: profileData,
-        loading: false,
-      });
-
-      return { success: true };
-    } catch (error) {
-      set({ error: error.message, loading: false });
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Registrar usuario
-  register: async (email, password, username, profileData = {}) => {
-    set({ loading: true, error: null, setIsVrchatUser: false });
-    try {
-      // 1. Registrar al usuario
-
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('signUpData : ', signUpData);
-      console.log('signUpError : ', signUpError);
-      if (signUpError) {
-        console.error('Error al registrar:', signUpError);
-        return;
-      }
+      if (error) throw error;
 
-      // 2. Obtener el ID del usuario registrado
-      const userId = signUpData.user?.id;
+      // Cargar perfil tras login exitoso
+      await get().fetchProfile(data.user.id);
 
-      console.log('userId : ', userId); // Añade esta línea para imprimir el userId en la consola
-
-      if (!userId) {
-        console.error('No se pudo obtener el ID del usuario');
-        return;
-      }
-
-      // 3. Crear el perfil vinculado al usuario
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: userId,
-        username,
-        avatar_url: profileData.avatar_url || null,
-        bio: profileData.bio || '',
-        country: profileData.country || '',
-        languages: profileData.languages || [],
-      });
-
-      if (profileError) {
-        console.error('Error al guardar el perfil:', profileError);
-      }
-
-      // Recuperar perfil insertado
-      const { data: insertedProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      set({
-        user: signUpData.user,
-        session: signUpData.session,
-        profile: insertedProfile,
-        loading: false,
-      });
-
-      return { success: true };
+      set({ user: data.user, loading: false });
+      return { success: true, user: data.user };
     } catch (error) {
-      set({ error: error.message, loading: false });
-      return { success: false, error: error.message };
+      console.error('Error en login:', error);
+      
+      let errorMessage = error.message;
+      if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Tu correo no ha sido confirmado. Por favor revisa tu bandeja de entrada.';
+      } else if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Correo o contraseña incorrectos.';
+      }
+
+      set({ error: errorMessage, loading: false });
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Actualizar perfil
-  updateProfile: async (profileData) => {
+  // Registro: ahora solo email, password y username
+  register: async (email, password, username) => {
     set({ loading: true, error: null });
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      // 1. Crear usuario en Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-      if (userError || !user) throw new Error('Usuario no autenticado');
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('No se pudo crear el usuario');
 
-      const { data, error } = await supabase
+      // 2. Crear perfil en tabla 'profiles'
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .update(profileData)
-        .eq('id', user.id)
+        .insert([
+          { 
+            id: authData.user.id, 
+            username,
+            avatar_url: 'https://via.placeholder.com/150', // Avatar por defecto
+            bio: 'Nuevo usuario en VRConnect' 
+          }
+        ])
+        .select()
         .single();
 
-      if (error) throw error;
+      if (profileError) {
+        console.error('Error creando perfil:', profileError);
+        // Podríamos intentar borrar el user si falla el profile, pero por ahora lo dejamos así
+      }
 
-      set({ profile: data, loading: false });
-      return { success: true };
+      set({ 
+        user: authData.user, 
+        profile: profileData,
+        loading: false 
+      });
+      return { success: true, user: authData.user };
     } catch (error) {
+      console.error('Error en registro:', error);
       set({ error: error.message, loading: false });
       return { success: false, error: error.message };
     }
@@ -134,46 +86,49 @@ const useAuthStore = create((set) => ({
   // Cerrar sesión
   logout: async () => {
     set({ loading: true });
-    const { error } = await supabase.auth.signOut();
-    set({
-      user: null,
-      session: null,
-      profile: null,
-      loading: false,
-      error: error?.message || null,
-    });
+    try {
+      await supabase.auth.signOut();
+      set({ user: null, profile: null, loading: false });
+    } catch (error) {
+      set({ error: error.message, loading: false });
+    }
   },
 
-  // Verificar sesión activa y cargar perfil
+  // Obtener perfil de usuario
+  fetchProfile: async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) throw error;
+      set({ profile: data });
+      return data;
+    } catch (error) {
+      console.error('Error recuperando perfil:', error);
+      return null;
+    }
+  },
+
+  // Restaurar sesión al iniciar app
   checkSession: async () => {
     set({ loading: true });
-    const { data, error } = await supabase.auth.getSession();
-
-    if (error || !data.session) {
-      set({ user: null, session: null, profile: null, loading: false, error: error?.message });
-      return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        await get().fetchProfile(session.user.id);
+        set({ user: session.user, loading: false });
+      } else {
+        set({ loading: false });
+      }
+    } catch (error) {
+      console.error('Error restaurando sesión:', error);
+      set({ loading: false });
     }
-
-    const userId = data.session.user.id;
-
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (profileError) {
-      set({ error: profileError.message, loading: false });
-      return;
-    }
-
-    set({
-      user: data.session.user,
-      session: data.session,
-      profile: profileData,
-      loading: false,
-    });
-  },
+  }
 }));
 
 export default useAuthStore;

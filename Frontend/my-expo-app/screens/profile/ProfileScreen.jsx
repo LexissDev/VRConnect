@@ -287,148 +287,18 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Contenido principal */}
-        <View className="px-6">
-          {/* Apartado de VRChat */}
-          {!isVrchatUser ? (
-            <TouchableOpacity
-              className="mb-4 overflow-hidden rounded-xl"
-              onPress={() => navigation.navigate('VRChatLogin')}>
-              <View className="bg-[#232567] p-4">
-                <View className="flex-row items-center">
-                  <View className="mr-4 h-12 w-12 items-center justify-center rounded-full bg-[#3A3A8B]">
-                    <Feather name="globe" size={24} color="white" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-lg font-bold text-white">Conectar con VRChat</Text>
-                    <Text className="text-sm text-gray-300">
-                      Accede a mundos, amigos y eventos de VRChat
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={24} color="white" />
-                </View>
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <>
-              {/* Sección de amigos */}
-              <View className="mb-4 rounded-xl bg-[#232567] p-4">
-                <View className="mb-3 flex-row items-center justify-between">
-                  <Text className="text-lg font-bold text-white">Amigos de VRChat</Text>
-                  <TouchableOpacity
-                    className="rounded-full bg-[#3A3A8B] p-2"
-                    onPress={() => loadVRChatFriends()}>
-                    <Feather name="refresh-cw" size={16} color="white" />
-                  </TouchableOpacity>
-                </View>
-
-                {loadingFriends ? (
-                  <ActivityIndicator color="#8B5CF6" size="small" />
-                ) : friends && friends.length > 0 ? (
-                  <View>
-                    {friends.slice(0, 3).map((friend, index) => (
-                      <View
-                        key={index}
-                        className="mb-2 flex-row items-center rounded-lg bg-[#3A3A8B] p-2">
-                        <View className="mr-3 h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#232567]">
-                          {friend.currentAvatarThumbnailImageUrl ? (
-                            <Image
-                              source={{ uri: friend.currentAvatarThumbnailImageUrl }}
-                              className="h-10 w-10"
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <Feather name="user" size={18} color="white" />
-                          )}
-                        </View>
-                        <View className="flex-1">
-                          <Text className="font-medium text-white">{friend.displayName}</Text>
-                          <View className="flex-row items-center">
-                            <View
-                              className={`mr-2 h-2 w-2 rounded-full ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`}
-                            />
-                            <Text className="text-xs text-gray-300">
-                              {friend.status === 'online' ? 'En línea' : 'Desconectado'}
-                            </Text>
-                          </View>
-                        </View>
-                        {friend.location && friend.location !== 'offline' && (
-                          <View className="rounded-full bg-purple-900 px-2 py-1">
-                            <Text className="text-xs text-white">En un mundo</Text>
-                          </View>
-                        )}
-                      </View>
-                    ))}
-
-                    {friends.length > 3 && (
-                      <TouchableOpacity
-                        className="mt-2 items-center rounded-lg bg-[#3A3A8B] p-2"
-                        onPress={() => navigation.navigate('VRChatFriends')}>
-                        <Text className="text-sm font-medium text-white">Ver todos los amigos</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ) : (
-                  <Text className="text-center text-gray-300">No se encontraron amigos</Text>
-                )}
-              </View>
-
-              {/* Sección de mundos recientes */}
-              <View className="mb-4 rounded-xl bg-[#232567] p-4">
-                <View className="mb-3 flex-row items-center justify-between">
-                  <Text className="text-lg font-bold text-white">Mundos Recientes</Text>
-                  <TouchableOpacity
-                    className="rounded-full bg-[#3A3A8B] p-2"
-                    onPress={() => loadRecentWorlds()}>
-                    <Feather name="refresh-cw" size={16} color="white" />
-                  </TouchableOpacity>
-                </View>
-
-                {loadingWorlds ? (
-                  <ActivityIndicator color="#8B5CF6" size="small" />
-                ) : recentWorlds && recentWorlds.length > 0 ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="py-2">
-                    {recentWorlds.map((world, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        className="mr-3 overflow-hidden rounded-lg"
-                        onPress={() => navigation.navigate('WorldDetail', { worldId: world.id })}>
-                        <View className="h-24 w-32 overflow-hidden bg-[#3A3A8B]">
-                          {world.thumbnailImageUrl ? (
-                            <Image
-                              source={{ uri: world.thumbnailImageUrl }}
-                              className="h-full w-full"
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <View className="h-full w-full items-center justify-center">
-                              <Feather name="image" size={24} color="white" />
-                            </View>
-                          )}
-                        </View>
-                        <View className="bg-[#3A3A8B] p-2">
-                          <Text className="text-xs font-medium text-white" numberOfLines={1}>
-                            {world.name}
-                          </Text>
-                          <Text className="text-xs text-gray-300" numberOfLines={1}>
-                            por {world.authorName}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <Text className="text-center text-gray-300">
-                    No se encontraron mundos recientes
-                  </Text>
-                )}
-              </View>
-            </>
-          )}
-
-          {/* Resto del contenido existente */}
-          {/* ... existing code ... */}
-        </View>
+          {/* Contenido principal */}
+          <View className="px-6">
+             <View className="flex-row items-center justify-between mb-4">
+                  <Text className="text-white text-lg font-bold">Mis Datos</Text>
+             </View>
+             
+             {/* Aquí podrías poner estadísticas propias de la app o nada */}
+             <View className="bg-[#2A2A2A] p-4 rounded-xl mb-4">
+                 <Text className="text-gray-400">Nombre de usuario: {username}</Text>
+                 <Text className="text-gray-400">Email: {useAuthStore.getState().user?.email}</Text>
+             </View>
+          </View>
       </ScrollView>
     </SafeAreaView>
   );

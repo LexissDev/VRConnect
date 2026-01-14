@@ -9,22 +9,19 @@ import {
   FlatList,
   Dimensions,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import useAuthStore from 'stores/authStore';
 import useWorldsStore from 'stores/worldsStore';
 import useEventsStore from 'stores/eventStore';
 import useConfessionsStore from 'stores/confessionsStore';
-import WorldCard from '../../components/world/WorldCard';
-import EventCard from '../../components/event/EventCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCurrentUser, getPopularWorlds } from 'services/vrchat';
+import { getPopularWorlds } from 'services/vrchat';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const HomeScreen = ({ navigation }) => {
-  const { user } = useAuthStore();
-  const { topWorlds, fetchTopWorlds } = useWorldsStore();
+  const { user, logout } = useAuthStore();
   const { upcomingEvents, fetchUpcomingEvents } = useEventsStore();
   const { fetchLatestConfessions } = useConfessionsStore();
   const [refreshing, setRefreshing] = useState(false);
@@ -32,38 +29,15 @@ const HomeScreen = ({ navigation }) => {
   const [popularWorlds, setPopularWorlds] = useState([]);
 
   useEffect(() => {
-    const isCurrentUser = async () => {
-      const isAuthenticated = await getCurrentUser();
-      if (isAuthenticated.error) {
-        navigation.navigate('VRChatLinkPrompt');
-        return;
-      }
-      return isAuthenticated;
-    };
-    isCurrentUser();
-  }, []);
-
-  useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
-      //await Promise.all([fetchTopWorlds(), fetchUpcomingEvents()]);
       const confessions = await fetchLatestConfessions();
-      console.log('confessions: ', confessions);
       setLatestConfessions(confessions);
-    } catch (error) {
-      console.error('Error cargando datos:', error);
-    }
-  };
-  useEffect(() => {
-    loadPopularWorlds();
-  },[])
-
-  const loadPopularWorlds = async () => {
-    try {
-      const worlds = await getPopularWorlds(7);
+      
+      const worlds = await getPopularWorlds(5);
       // Formatear los datos para que coincidan con la estructura esperada
       const formattedWorlds = worlds.map(world => ({
         id: world.id,
@@ -71,15 +45,14 @@ const HomeScreen = ({ navigation }) => {
         description: world.description,
         image_url: world.imageUrl,
         likes_count: world.favorites,
-        creator: {
-          username: world.authorName
-        }
+        authorName: world.authorName
       }));
       setPopularWorlds(formattedWorlds);
-      return formattedWorlds;
+      
+      await fetchUpcomingEvents();
+
     } catch (error) {
-      console.error('Error cargando mundos populares:', error);
-      return [];
+      console.error('Error cargando datos:', error);
     }
   };
 
@@ -89,299 +62,210 @@ const HomeScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  // Renderizador mejorado para el carrusel de confesiones
-  const renderConfessionItem = ({ item }) => (
-    <LinearGradient
-      colors={['#9333EA', '#7E22CE']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      className="mx-4 h-[180px] w-[220px] rounded-2xl p-4 shadow-lg"
-      style={{ borderRadius: 20, overflow: 'hidden' }}>
-      <View className="w-64 flex-1 justify-between">
-        {/* Header con avatar y autor */}
-        <View className="mb-1 flex-row items-center p-1">
-          {item.author === 'Anónimo' ? (
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-purple-800">
-              <Feather name="user" size={18} color="white" />
-            </View>
-          ) : (
-            <Image source={{ uri: item.avatar }} className="h-10 w-10 rounded-full bg-purple-300" />
-          )}
-
-          <View className="ml-2">
-            <Text className="font-medium text-white">{item.author}</Text>
-          </View>
-        </View>
-
-        {/* Contenido de la confesión con truncado */}
-        <View className="flex-1 p-1">
-          <Text className="text-base font-bold text-white" numberOfLines={3} ellipsizeMode="tail">
-            {item.text}
-          </Text>
-        </View>
-
-        {/* Footer con likes - siempre abajo a la derecha */}
-        <View className="flex-row items-center justify-end">
-          <TouchableOpacity className="mr-3 flex-row items-center">
-            <Feather name="heart" size={24} color="white" />
-            <Text className="ml-1 text-sm text-white">{item.likes}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </LinearGradient>
-  );
-
-  // Renderizador para el carrusel de mundos
-  // Renderizador para el carrusel de mundos con estilo de slider
-
-  // Renderizador para el carrusel de eventos
-  const renderEventItem = ({ item }) => (
-    <View className="mx-2 w-[300px]">
-      <EventCard
-        event={item}
-        onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+  /**
+   * SECCIÓN: FEATURED WORLDS (Carrusel Horizontal Grande)
+   */
+  const renderFeaturedWorld = ({ item }) => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('WorldDetail', { worldId: item.id })}
+      style={{ width: screenWidth * 0.85 }}
+      className="mr-5 h-52 overflow-hidden rounded-3xl bg-gray-200 shadow-md"
+    >
+      <Image 
+        source={{ uri: item.image_url }} 
+        className="h-full w-full"
+        resizeMode="cover" 
       />
-    </View>
-  );
-
-  // Componente para el botón "Ver todos"
-  const SeeAllButton = ({ title, onPress }) => (
-    <TouchableOpacity onPress={onPress} className="flex-row items-center">
-      <Text className="mr-1 text-purple-500">{title}</Text>
-      <Feather name="chevron-right" size={16} color="#8B5CF6" />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        className="absolute bottom-0 left-0 right-0 h-28 justify-end p-5"
+      >
+        <Text className="text-xl font-bold text-white shadow-sm">{item.name}</Text>
+        <Text className="text-sm text-gray-300 shadow-sm">by {item.authorName || 'VRChat'}</Text>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
-  // Componente para la sección de carrusel
-  const CarouselSection = ({
-    title,
-    data,
-    renderItem,
-    onSeeAll,
-    emptyIcon,
-    emptyText,
-    itemHeight,
-  }) => (
-    <View className="mt-6 rounded-lg pb-2">
-      <View className="mb-4 flex-row items-center justify-between px-6">
-        <Text className="text-lg font-bold text-white">{title}</Text>
-        <SeeAllButton title="Ver todos" onPress={onSeeAll} />
-      </View>
-
-      {data && data.length > 0 ? (
-        <FlatList
-          data={title === 'Mundos Populares' && data.length === 0 ? Array(5).fill(null) : data}
-          renderItem={renderItem}
-          keyExtractor={(item, index) => (item ? item.id.toString() : `demo-${index}`)}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={title === 'Mundos Populares' ? screenWidth * 0.8 + 16 : screenWidth * 0.6}
-          snapToAlignment="center"
-          decelerationRate="fast"
-          contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10 }}
-          style={{
-            height: title === 'Mundos Populares' ? 220 : 150,
-            borderRadius: 16,
-          }}
-          ItemSeparatorComponent={() => <View style={{ width: 15 }} />}
-          pagingEnabled={title === 'Mundos Populares'}
-        />
-      ) : (
-        <View className="mx-6 flex h-[150px] items-center justify-center rounded-xl bg-gray-800">
-          <Feather name={emptyIcon} size={32} color="#9CA3AF" />
-          <Text className="mt-2 text-gray-400">{emptyText}</Text>
+  /**
+   * SECCIÓN: LATEST CONFESSIONS (Tarjeta Limpia)
+   */
+  const renderConfessionCard = ({ item }) => (
+     <TouchableOpacity 
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('ConfessionDetail', { confessionId: item.id })} // Assuming this route exists
+        className="mr-4 w-[280px] rounded-3xl bg-white p-5 shadow-sm shadow-purple-100" // Light shadow
+        style={{ elevation: 2 }}
+    >
+        <View className="mb-3 flex-row items-center justify-between">
+            <View className="rounded-full bg-purple-100 px-3 py-1">
+                <Text className="text-xs font-bold text-purple-600">
+                    {item.anonymous ? 'ANÓNIMO' : user?.username?.toUpperCase() || 'USUARIO'}
+                </Text>
+            </View>
+            <Feather name="message-square" size={20} color="#E9D5FF" /> 
         </View>
-      )}
-    </View>
+
+        <Text className="mb-4 text-base font-medium leading-6 text-gray-700" numberOfLines={3}>
+            "{item.text}"
+        </Text>
+
+        <View className="flex-row items-center justify-between">
+            <Text className="text-xs text-gray-400">Hace 12 min</Text>
+            <View className="flex-row items-center space-x-3">
+                 <View className="flex-row items-center">
+                    <Feather name="heart" size={14} color="#9CA3AF" />
+                    <Text className="ml-1 text-xs text-gray-500">{item.likes || 0}</Text>
+                 </View>
+                 <View className="flex-row items-center ml-2">
+                    <Feather name="message-circle" size={14} color="#9CA3AF" />
+                    <Text className="ml-1 text-xs text-gray-500">{item.comments || 0}</Text>
+                 </View>
+            </View>
+        </View>
+    </TouchableOpacity>
   );
 
-  // Datos de ejemplo para mundos populares (demo)
-  const demoWorlds = [
-    {
-      id: 1,
-      name: 'VR Plaza',
-      description: 'Un espacio social para conocer nuevos amigos',
-      image: 'https://i.imgur.com/JQcWnwG.jpg',
-      users: 245,
-      rating: 4.8,
-    },
-    {
-      id: 2,
-      name: 'Neon City',
-      description: 'Explora una ciudad cyberpunk llena de luces y misterios',
-      image: 'https://i.imgur.com/pYaO9jA.jpg',
-      users: 189,
-      rating: 4.6,
-    },
-    {
-      id: 3,
-      name: 'Fantasy Kingdom',
-      description: 'Un reino mágico con dragones y aventuras',
-      image: 'https://i.imgur.com/L8KiQLy.jpg',
-      users: 312,
-      rating: 4.9,
-    },
-    {
-      id: 4,
-      name: 'Space Station',
-      description: 'Viaja al espacio y experimenta la gravedad cero',
-      image: 'https://i.imgur.com/DvzYAUC.jpg',
-      users: 156,
-      rating: 4.5,
-    },
-    {
-      id: 5,
-      name: 'Tropical Paradise',
-      description: 'Relájate en una playa virtual con amigos',
-      image: 'https://i.imgur.com/HQmh5YN.jpg',
-      users: 203,
-      rating: 4.7,
-    },
-  ];
-
-  // Componente para el slider de mundos populares
-  const PopularWorldsSlider = () => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-
-    const handleSlideChange = (index) => {
-      setCurrentIndex(index);
-    };
-
-    // Usar datos reales o mostrar un placeholder si no hay datos
-    const worldsToShow = popularWorlds.length > 0 ? popularWorlds : [];
-
-    return (
-      <View className="mt-6 pb-4">
-        <View className="mb-4 flex-row items-center justify-between px-6">
-          <Text className="text-lg font-bold text-white">Mundos Populares</Text>
-          <SeeAllButton title="Ver todos" onPress={() => navigation.navigate('Worlds')} />
+  /**
+   * SECCIÓN: TRENDING EVENTS (Lista Vertical o Horizontal)
+   */
+  const renderEventItem = ({ item }) => (
+    <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+        className="mb-4 flex-row items-center rounded-3xl bg-white p-4 shadow-sm shadow-purple-100"
+        style={{ elevation: 1 }}
+    >
+        {/* Icon Box */}
+        <View className={`h-16 w-16 items-center justify-center rounded-2xl ${item.category === 'Music' ? 'bg-purple-100' : 'bg-gray-100'}`}>
+            <Feather 
+                name={item.category === 'Music' ? 'music' : 'calendar'} // Simple logic for demo
+                size={24} 
+                color={item.category === 'Music' ? '#9333EA' : '#6B7280'} 
+            />
         </View>
 
-        {worldsToShow.length > 0 ? (
-          <>
-            <FlatList
-              data={worldsToShow}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(event) => {
-                const slideIndex = Math.floor(event.nativeEvent.contentOffset.x / (screenWidth - 40));
-                handleSlideChange(slideIndex);
-              }}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  className="mx-5 overflow-hidden rounded-2xl"
-                  style={{ width: screenWidth - 40, height: 220 }}
-                  onPress={() => navigation.navigate('WorldDetail', { worldId: item.id })}>
-                  <View className="relative h-full w-full">
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
-                    ) : (
-                      <View className="h-full w-full items-center justify-center bg-purple-900">
-                        <Feather name="globe" size={40} color="white" />
-                      </View>
-                    )}
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.8)']}
-                      style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 }}
-                    />
-                    <View className="absolute bottom-0 left-0 right-0 p-4">
-                      <Text className="text-xl font-bold text-white">{item.name}</Text>
-                      <Text className="text-sm text-gray-300" numberOfLines={2}>
-                        {item.description}
-                      </Text>
-
-                      <View className="mt-2 flex-row items-center justify-between">
-                        <View className="flex-row items-center">
-                          <Feather name="user" size={14} color="#9CA3AF" />
-                          <Text className="ml-1 text-xs text-gray-400">Creador: {item.creator?.username || 'Desconocido'}</Text>
-                        </View>
-                        <View className="flex-row items-center">
-                          <Feather name="heart" size={14} color="#FBBF24" />
-                          <Text className="ml-1 text-xs text-gray-400">{item.likes_count || 0}</Text>
-                        </View>
-                      </View>
+        {/* Info */}
+        <View className="flex-1 px-4">
+             <View className="flex-row items-center mb-1">
+                {item.is_live && (
+                    <View className="mr-2 rounded bg-green-400 px-1.5 py-0.5">
+                        <Text className="text-[10px] font-bold text-white">LIVE</Text>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.id.toString()}
-            />
+                )}
+                <Text className="text-xs font-bold text-purple-600 uppercase">
+                    {item.is_live ? 'EN CURSO' : 'PRÓXIMAMENTE'}
+                </Text>
+             </View>
+             
+             <Text className="text-base font-bold text-gray-900" numberOfLines={1}>{item.title}</Text>
+             <Text className="text-sm text-gray-500">{item.location || 'VRChat'} • {item.attendees || 0} interesados</Text>
+        </View>
 
-            {/* Indicadores de posición */}
-            <View className="mt-3 flex-row items-center justify-center">
-              {worldsToShow.map((_, index) => (
-                <View
-                  key={index}
-                  className={`mx-1 h-2 rounded-full ${
-                    currentIndex === index ? 'w-6 bg-purple-500' : 'w-2 bg-gray-600'
-                  }`}
-                />
-              ))}
-            </View>
-          </>
-        ) : (
-          <View className="mx-6 flex h-[220px] items-center justify-center rounded-xl bg-gray-800">
-            <Feather name="globe" size={32} color="#9CA3AF" />
-            <Text className="mt-2 text-gray-400">No hay mundos populares disponibles</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+        {/* Action Button */}
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-purple-500 shadow-md shadow-purple-200">
+             <Feather name="chevron-right" size={20} color="white" />
+        </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView className="flex-1 bg-[#121212]">
+    <SafeAreaView className="flex-1 bg-[#F9FAFB]">
       <ScrollView
-        className="flex-1 bg-[#121212]"
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
-        }>
-        {/* Header con saludo */}
-        <View className="p-6 pb-2">
-          <Text className="text-2xl font-bold text-white">
-            Hola, {user?.username || 'Explorador'}
-          </Text>
-          <Text className="mt-1 text-base text-gray-400">Bienvenido a VRConnect</Text>
+        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {/* HEADER */}
+        <View className="mb-6 flex-row items-center justify-between px-6 pt-4">
+            <View className="flex-row items-center">
+                <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+                    <Image
+                        source={{ uri: user?.profile?.avatar_url || 'https://via.placeholder.com/100' }}
+                        className="h-14 w-14 rounded-full border-2 border-purple-500" 
+                    />
+                    {/* Online Status Indicator */}
+                    <View className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-green-400 border-2 border-white" />
+                </TouchableOpacity>
+                <View className="ml-3">
+                    <Text className="text-xl font-bold text-gray-900">¡Hola, {user?.username}!</Text>
+                    <Text className="text-sm text-purple-600 font-medium">Online en VRC</Text>
+                </View>
+            </View>
+
+            <TouchableOpacity 
+                onPress={logout}
+                className="h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm"
+            >
+                <Feather name="log-out" size={24} color="#EF4444" />
+            </TouchableOpacity>
         </View>
 
-        {/* Banner destacado */}
-        <View className="mx-6 mt-4 overflow-hidden rounded-xl">
-          <Image
-            source={require('../../assets/mundoInicio.webp')}
-            className="h-40 w-full rounded-xl"
-            resizeMode="cover"
-          />
-          <View className="absolute bottom-0 left-0 right-0 bg-black/50 p-4">
-            <Text className="text-lg font-bold text-white">Descubre nuevos mundos en VRChat</Text>
-            <Text className="text-sm text-gray-300">Explora, conecta y comparte experiencias</Text>
-          </View>
+        {/* FEATURED WORLDS */}
+        <View className="mb-8">
+            <View className="mb-4 flex-row items-baseline justify-between px-6">
+                <Text className="text-2xl font-bold text-gray-900">Featured Worlds</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Worlds')}>
+                    <Text className="text-sm font-bold text-purple-600">Ver todos</Text>
+                </TouchableOpacity>
+            </View>
+            
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={popularWorlds}
+                keyExtractor={item => item.id.toString()}
+                renderItem={renderFeaturedWorld}
+                contentContainerStyle={{ paddingHorizontal: 24 }}
+            />
         </View>
 
-        {/* Carrusel de Confesiones mejorado */}
-        <CarouselSection
-          title="Últimas Confesiones"
-          data={latestConfessions}
-          renderItem={renderConfessionItem}
-          onSeeAll={() => navigation.navigate('Confessions')}
-          emptyIcon="message-square"
-          emptyText="No hay confesiones disponibles"
-          itemHeight={200}
-        />
+        {/* LATEST CONFESSIONS */}
+        <View className="mb-8">
+             <View className="mb-4 px-6">
+                <Text className="text-2xl font-bold text-gray-900">Latest Confessions</Text>
+            </View>
 
-        {/* Slider de Mundos Populares */}
-        <PopularWorldsSlider />
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={latestConfessions}
+                keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                renderItem={renderConfessionCard}
+                contentContainerStyle={{ paddingHorizontal: 24 }}
+                ListEmptyComponent={
+                    <View className="ml-6 w-[280px] rounded-3xl bg-white p-5 shadow-sm items-center justify-center">
+                        <Text className="text-gray-400">No hay confesiones recientes</Text>
+                    </View>
+                }
+            />
+        </View>
 
-        {/* Carrusel de Próximos Eventos */}
-        <CarouselSection
-          title="Próximos Eventos"
-          data={upcomingEvents}
-          renderItem={renderEventItem}
-          onSeeAll={() => navigation.navigate('Events')}
-          emptyIcon="calendar"
-          emptyText="No hay eventos próximos"
-          itemHeight={200}
-        />
+        {/* TRENDING EVENTS */}
+        <View className="px-6">
+             <View className="mb-4 flex-row items-baseline justify-between">
+                <Text className="text-2xl font-bold text-gray-900">Trending Events</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Events')}>
+                    <Text className="text-sm font-bold text-purple-600">Explorar</Text>
+                </TouchableOpacity>
+            </View>
+
+            {upcomingEvents.length > 0 ? (
+                upcomingEvents.map((event, index) => (
+                    <View key={event.id || index}>
+                        {renderEventItem({ item: event })}
+                    </View>
+                ))
+            ) : (
+                 <View className="rounded-3xl bg-white p-8 items-center shadow-sm">
+                    <Feather name="calendar" size={40} color="#D1D5DB" />
+                    <Text className="mt-2 text-gray-500">No hay eventos próximos hoy</Text>
+                </View>
+            )}
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );

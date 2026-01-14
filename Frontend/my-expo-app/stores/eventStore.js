@@ -3,6 +3,7 @@ import supabase from 'services/supabase';
 
 const useEventsStore = create((set, get) => ({
   events: [],
+  upcomingEvents: [],
   currentEvent: null,
   loading: false,
   error: null,
@@ -29,6 +30,31 @@ const useEventsStore = create((set, get) => ({
       console.error('Error en fetchEvents:', error);
       set({ error: error.message, loading: false });
       return [];
+    }
+  },
+
+  // Obtener eventos próximos (upcoming)
+  fetchUpcomingEvents: async () => {
+    set({ loading: true, error: null });
+    try {
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+            .from('events')
+            .select('*')
+            .gte('start_time', now) // Solo futuros
+            .order('start_time', { ascending: true });
+
+        if (error) throw error;
+
+        set({ upcomingEvents: data, loading: false });
+        return data;
+    } catch (error) {
+        console.error('Error en fetchUpcomingEvents:', error);
+        set({ error: error.message, loading: false });
+        // Fallback: usar fetchEvents si falla el filtro
+        const allEvents = await get().fetchEvents();
+        set({ upcomingEvents: allEvents });
+        return allEvents;
     }
   },
 

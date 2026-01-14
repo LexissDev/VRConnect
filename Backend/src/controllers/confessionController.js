@@ -96,11 +96,34 @@ export const commentOnConfession = async (req, res) => {
     const { data, error } = await supabase
       .from('confession_comments')
       .insert([{ confession_id, user_id, content, is_anonymous }])
+      .select()
       .single();
 
     if (error) throw error;
     res.status(201).json(data);
   } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Obtener comentarios de una confesión
+export const getComments = async (req, res) => {
+  try {
+    const { confessionId } = req.params;
+
+    const { data, error } = await supabase
+      .from('confession_comments')
+      .select(`
+        *,
+        profiles (username, avatar_url)
+      `)
+      .eq('confession_id', confessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching comments:', error);
     res.status(400).json({ error: error.message });
   }
 };

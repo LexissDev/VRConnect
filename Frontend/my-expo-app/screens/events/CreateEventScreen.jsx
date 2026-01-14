@@ -22,6 +22,9 @@ import useAuthStore from 'stores/authStore';
 import useEventsStore from 'stores/eventStore';
 import { getWorlds } from 'services/vrchat';
 
+import * as ImagePicker from 'expo-image-picker';
+import cloudinary from 'services/cloudinary';
+
 const CreateEventScreen = ({ navigation }) => {
   const { user } = useAuthStore();
   const { createEvent, loading } = useEventsStore();
@@ -38,6 +41,7 @@ const CreateEventScreen = ({ navigation }) => {
   // Custom Image State
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [useCustomImage, setUseCustomImage] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false); // Estado para loading de imagen
   
   // Estados para el buscador de mundos
   const [worldSearchModalVisible, setWorldSearchModalVisible] = useState(false);
@@ -51,6 +55,27 @@ const CreateEventScreen = ({ navigation }) => {
     sort: 'popularity',
     releaseStatus: 'public',
   });
+
+  const pickImage = async () => {
+    // Solicitar permisos
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      alert('Se necesitan permisos para acceder a la galería');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], // Updated to use array based on deprecation warning if applicable, or ImagePicker.MediaType.Images
+      allowsEditing: true,
+      aspect: [16, 9], // Aspect ratio para banners de eventos
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setCustomImageUrl(result.assets[0].uri);
+    }
+  };
 
   // Función para buscar mundos
   const searchWorlds = async (refresh = false) => {
@@ -162,6 +187,21 @@ const CreateEventScreen = ({ navigation }) => {
   // Enviar el formulario
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    let finalImageUrl = useCustomImage ? customImageUrl : null;
+
+    // Subir imagen si es local
+    if (useCustomImage && customImageUrl && !customImageUrl.startsWith('http')) {
+        setUploadingImage(true);
+        try {
+            finalImageUrl = await cloudinary.uploadToCloudinary(customImageUrl);
+        } catch (error) {
+            alert('Error al subir la imagen. Intenta de nuevo.');
+            setUploadingImage(false);
+            return;
+        }
+        setUploadingImage(false);
+    }
   
     const eventData = {
       title,
@@ -169,7 +209,7 @@ const CreateEventScreen = ({ navigation }) => {
       world_id: selectedWorld.id,
       start_time: startDate.toISOString(),
       end_time: endDate.toISOString(),
-      image_url: useCustomImage ? customImageUrl : null,
+      image_url: finalImageUrl,
       world_data: {
         name: selectedWorld.name,
         image_url: selectedWorld.thumbnailImageUrl || selectedWorld.imageUrl,
@@ -180,6 +220,7 @@ const CreateEventScreen = ({ navigation }) => {
     try {
       const result = await createEvent(eventData);
       console.log("Resultado completo:", result);
+
       
       if (result.success) {
         console.log("Evento creado exitosamente:", result.event);
@@ -370,38 +411,52 @@ const CreateEventScreen = ({ navigation }) => {
             {/* Selector de Imagen */}
             <Text className="mb-2 text-base font-bold text-white">Imagen del evento</Text>
             <View className="mb-4">
-              <View className="mb-2 flex-row">
-                <TouchableOpacity 
-                  onPress={() => setUseCustomImage(false)}
-                  className={`mr-2 flex-1 rounded-lg p-3 border ${!useCustomImage ? 'bg-purple-900 border-purple-500' : 'bg-[#2A2A2A] border-transparent'}`}>
-                  <Text className={`text-center font-bold ${!useCustomImage ? 'text-white' : 'text-gray-400'}`}>Por defecto (Mundo)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => setUseCustomImage(true)}
-                  className={`ml-2 flex-1 rounded-lg p-3 border ${useCustomImage ? 'bg-purple-900 border-purple-500' : 'bg-[#2A2A2A] border-transparent'}`}>
-                  <Text className={`text-center font-bold ${useCustomImage ? 'text-white' : 'text-gray-400'}`}>Personalizada</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {useCustomImage && (
-                <View>
-                  <TextInput
-                    className="mb-2 rounded-lg bg-[#2A2A2A] p-3 text-white"
-                    placeholder="URL de la imagen (https://...)"
-                    placeholderTextColor="#999"
-                    value={customImageUrl}
-                    onChangeText={setCustomImageUrl}
-                  />
-                  {customImageUrl ? (
-                    <Image 
-                      source={{ uri: customImageUrl }} 
-                      className="h-40 w-full rounded-lg bg-[#2A2A2A]" 
-                      resizeMode="cover"
-                    />
-                  ) : null}
+                  {/* Selector de tipo de imagen */}
+                  <View className="mb-2 flex-row">
+                    <TouchableOpacity 
+                      onPress={() => setUseCustomImage(false)}
+                      className={`mr-2 flex-1 rounded-lg p-3 border ${!useCustomImage ? 'bg-purple-900 border-purple-500' : 'bg-[#2A2A2A] border-transparent'}`}>
+                      <Text className={`text-center font-bold ${!useCustomImage ? 'text-white' : 'text-gray-400'}`}>Por defecto (Mundo)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={() => setUseCustomImage(true)}
+                      className={`ml-2 flex-1 rounded-lg p-3 border ${useCustomImage ? 'bg-purple-900 border-purple-500' : 'bg-[#2A2A2A] border-transparent'}`}>
+                      <Text className={`text-center font-bold ${useCustomImage ? 'text-white' : 'text-gray-400'}`}>Personalizada</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {useCustomImage && (
+                    <View>
+                      <TouchableOpacity 
+                        onPress={pickImage}
+                        className="mb-3 flex-row items-center justify-center rounded-lg bg-[#3A3A8B] p-3">
+                        <Feather name="image" size={20} color="white" />
+                        <Text className="ml-2 font-bold text-white">Seleccionar de Galería</Text>
+                      </TouchableOpacity>
+
+                      <View className="flex-row items-center mb-2">
+                          <View className="h-[1px] flex-1 bg-gray-700" />
+                          <Text className="mx-2 text-xs text-gray-500">O ingresa URL</Text>
+                          <View className="h-[1px] flex-1 bg-gray-700" />
+                      </View>
+
+                      <TextInput
+                        className="mb-2 rounded-lg bg-[#2A2A2A] p-3 text-white"
+                        placeholder="URL de la imagen (https://...)"
+                        placeholderTextColor="#999"
+                        value={customImageUrl}
+                        onChangeText={setCustomImageUrl}
+                      />
+                      {customImageUrl ? (
+                        <Image 
+                          source={{ uri: customImageUrl }} 
+                          className="h-40 w-full rounded-lg bg-[#2A2A2A]" 
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                    </View>
+                  )}
                 </View>
-              )}
-            </View>
             {/* Fecha y hora de inicio */}
             <Text className="mb-2 text-base font-bold text-white">Fecha y hora de inicio</Text>
             <TouchableOpacity

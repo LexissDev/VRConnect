@@ -4,6 +4,7 @@ import {
   reportConfession,
   reactToConfession,
   commentOnConfession,
+  getComments,
   getConfessions,
 } from "../controllers/confessionController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
@@ -14,6 +15,7 @@ router.post("/", authMiddleware, createConfession);
 router.get("/", getConfessions);
 router.post("/react", authMiddleware, reactToConfession);
 router.post("/comment", authMiddleware, commentOnConfession);
+router.get("/:confessionId/comments", getComments);
 router.post("/report", authMiddleware, reportConfession);
 
 export default router;
