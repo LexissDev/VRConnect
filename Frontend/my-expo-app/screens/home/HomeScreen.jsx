@@ -36,7 +36,7 @@ const HomeScreen = ({ navigation }) => {
     try {
       const confessions = await fetchLatestConfessions();
       setLatestConfessions(confessions);
-      
+      /**
       const worlds = await getPopularWorlds(5);
       // Formatear los datos para que coincidan con la estructura esperada
       const formattedWorlds = worlds.map(world => ({
@@ -50,7 +50,7 @@ const HomeScreen = ({ navigation }) => {
       setPopularWorlds(formattedWorlds);
       
       await fetchUpcomingEvents();
-
+      */
     } catch (error) {
       console.error('Error cargando datos:', error);
     }

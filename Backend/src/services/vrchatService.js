@@ -84,11 +84,7 @@ export const verifyEmailOtp = async (code) => {
 export const getWorlds = async (params = {}) => {
   try {
     const { n, offset, sort, search, tag, notag, releaseStatus, featured } = params;
-    // Crear una instancia de la API de mundos
-    const currentUser = await authApi.getCurrentUser();
-    if (!currentUser.data || !currentUser.data.id) {
-      throw new Error("No authenticated session.");
-    }
+    // La sesión ya debe estar validada por el controlador (ensureBotSession)
 
     
 
